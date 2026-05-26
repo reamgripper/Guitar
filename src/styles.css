@@ -688,6 +688,53 @@ input:focus-visible {
   }
 }
 
+/* ─── Lyric / Chord-sheet display ─────────────────────────────────────────── */
+
+.lyrics-container {
+  padding: 8px 20px 4px;
+  overflow-x: auto;
+}
+
+.lyric-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  margin-bottom: 10px;
+  min-height: 2.8em;
+}
+
+/* one chord+text column */
+.cp {
+  display: inline-flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  align-items: flex-start;
+}
+
+.cp-chord {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1.6;
+  padding-right: 6px;
+  white-space: nowrap;
+  min-width: 1px;
+}
+
+.cp-empty {
+  visibility: hidden;
+  min-width: 0;
+  padding-right: 0;
+}
+
+.cp-text {
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  white-space: pre;
+  line-height: 1.6;
+  letter-spacing: 0.01em;
+}
+
 @keyframes shake {
   0%, 100% { transform: translateX(0); }
   20%       { transform: translateX(-6px); }

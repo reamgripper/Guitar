@@ -86,9 +86,22 @@ Return JSON with:
 - key (string, the sounding key)
 - capo (integer, fret number if capo helps, 0 if not needed)
 - tempo (string like "slow/moderate/fast/120bpm")
-- sections (array of objects with: name, chords (array of unique chord names as played with the capo), pattern (chord names in order showing repetition))
+- sections (array of objects with:
+    - name (string, e.g. "Verse", "Chorus", "Bridge")
+    - chords (array of unique chord names used in this section)
+    - lines (array of strings — each string is one lyric line with chord markers embedded using square brackets, e.g. "[G]Today is gonna be the [Em]day that [C]they're gonna [D]throw it back to you")
+  )
 
-Example of good output for a song in Db: use capo 1 and return chords in C shapes.`;
+Chord marker rules for lines:
+- Place [ChordName] immediately before the syllable where the chord changes.
+- Every line must have at least one chord marker.
+- Use real lyrics from the song, not placeholder text.
+
+Example output for a verse:
+"lines": [
+  "[G]Today is gonna be the [Em]day",
+  "That they're gonna [C]throw it back to [D]you"
+]`;
 
     const completion = await client.chat.completions.create({
       model: OLLAMA_MODEL,

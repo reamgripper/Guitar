@@ -270,6 +270,43 @@ function createUnknownChordSVG(chordName) {
   return svg;
 }
 
+// ─── Lyric / Chord-sheet Parser ──────────────────────────────────────────────
+
+// Parses "[G]Today is the [Em]day" into [{chord:"G", text:"Today is the "}, {chord:"Em", text:"day"}]
+function parseChordLine(line) {
+  const segments = [];
+  const firstBracket = line.indexOf('[');
+
+  // Text before the first chord marker
+  if (firstBracket > 0) {
+    segments.push({ chord: null, text: line.slice(0, firstBracket) });
+  } else if (firstBracket === -1) {
+    return [{ chord: null, text: line }];
+  }
+
+  const re = /\[([^\]]+)\]([^\[]*)/g;
+  let match;
+  while ((match = re.exec(line)) !== null) {
+    segments.push({ chord: match[1], text: match[2] });
+  }
+  return segments;
+}
+
+function buildLyricsHTML(lines, offset) {
+  return lines.map(line => {
+    const segments = parseChordLine(line);
+    const inner = segments.map(({ chord, text }) => {
+      const transposed = chord ? transposeChord(chord, offset) : null;
+      const chordSpan = transposed
+        ? `<span class="cp-chord">${escapeHTML(transposed)}</span>`
+        : `<span class="cp-chord cp-empty"></span>`;
+      const textSpan = `<span class="cp-text">${escapeHTML(text || '')}</span>`;
+      return `<span class="cp">${chordSpan}${textSpan}</span>`;
+    }).join('');
+    return `<div class="lyric-line">${inner}</div>`;
+  }).join('');
+}
+
 // ─── Application State ────────────────────────────────────────────────────────
 
 let currentChordData = null;
@@ -431,42 +468,41 @@ function renderResults(data) {
     block.className = 'section-block';
     block.style.animationDelay = `${idx * 0.08}s`;
 
-    // Transpose chords
     const transposedChords = (section.chords || []).map(c => transposeChord(c, transposeOffset));
-    const transposedPattern = transposePattern(section.pattern || '', transposeOffset);
 
-    // Section header
+    // Section header (name only)
     const header = document.createElement('div');
     header.className = 'section-header';
-    header.innerHTML = `
-      <span class="section-name">${escapeHTML(section.name)}</span>
-      <span class="section-pattern">${escapeHTML(transposedPattern)}</span>
-    `;
+    header.innerHTML = `<span class="section-name">${escapeHTML(section.name)}</span>`;
+    block.appendChild(header);
 
-    // Chord cards row
+    // Lyrics with inline chords (chord-sheet style)
+    if (section.lines && section.lines.length > 0) {
+      const lyricsEl = document.createElement('div');
+      lyricsEl.className = 'lyrics-container';
+      lyricsEl.innerHTML = buildLyricsHTML(section.lines, transposeOffset);
+      block.appendChild(lyricsEl);
+    }
+
+    // Chord diagram cards
     const chordsRow = document.createElement('div');
     chordsRow.className = 'section-chords';
-
     transposedChords.forEach(chord => {
       if (!chord) return;
       const card = document.createElement('div');
       card.className = 'chord-card';
-
       const nameEl = document.createElement('div');
       nameEl.className = 'chord-name-label';
       nameEl.textContent = chord;
-
       const diagramEl = document.createElement('div');
       diagramEl.className = 'chord-svg-container';
       diagramEl.innerHTML = createChordSVG(chord);
-
       card.appendChild(nameEl);
       card.appendChild(diagramEl);
       chordsRow.appendChild(card);
     });
-
-    block.appendChild(header);
     block.appendChild(chordsRow);
+
     sectionsContainer.appendChild(block);
   });
 }
