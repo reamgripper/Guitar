@@ -73,9 +73,22 @@ ipcMain.handle('generate-chords', async (event, { song, artist }) => {
       baseURL: OLLAMA_BASE_URL
     });
 
-    const systemPrompt = `You are a guitar chord expert. When given a song name and artist, provide accurate guitar chord progressions. Always respond with valid JSON only, no markdown, no explanation.`;
+    const systemPrompt = `You are a guitar chord expert. When given a song name and artist, provide accurate guitar chord progressions optimised for guitarists. Always respond with valid JSON only, no markdown, no explanation.`;
 
-    const userMessage = `Provide guitar chords for "${song}" by ${artist}. Return JSON with: key (string), tempo (string like "slow/moderate/fast/120bpm"), capo (integer, 0 if none), sections (array of {name, chords (unique chords array), pattern (chord names in order showing repetition)}). Include all song sections you know.`;
+    const userMessage = `Provide guitar chords for "${song}" by ${artist}.
+
+Rules:
+- Prefer guitar-friendly keys that use open chord shapes: G, C, D, E, A and their relative minors (Em, Am, Dm, Bm).
+- If the song is naturally in a difficult key (lots of sharps/flats), suggest a capo position so the fingering uses open chord shapes instead of all barre chords.
+- Use the most common guitarist's arrangement, not the original recorded key unless it's already guitar-friendly.
+
+Return JSON with:
+- key (string, the sounding key)
+- capo (integer, fret number if capo helps, 0 if not needed)
+- tempo (string like "slow/moderate/fast/120bpm")
+- sections (array of objects with: name, chords (array of unique chord names as played with the capo), pattern (chord names in order showing repetition))
+
+Example of good output for a song in Db: use capo 1 and return chords in C shapes.`;
 
     const completion = await client.chat.completions.create({
       model: OLLAMA_MODEL,
