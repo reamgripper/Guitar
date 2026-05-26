@@ -85,7 +85,7 @@ ipcMain.handle('get-api-key', async () => {
 
 ipcMain.handle('generate-chords', async (event, { song, artist, apiKey }) => {
   if (!apiKey) {
-    return { error: 'No API key provided. Please enter your Anthropic API key.' };
+    return { error: 'No API key provided. Please enter your DashScope API key.' };
   }
 
   if (!song || !artist) {
@@ -93,23 +93,33 @@ ipcMain.handle('generate-chords', async (event, { song, artist, apiKey }) => {
   }
 
   try {
-    const Anthropic = require('@anthropic-ai/sdk');
-    const client = new Anthropic({ apiKey });
+    const OpenAI = require('openai');
+    const client = new OpenAI({
+      apiKey,
+      baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+    });
 
     const systemPrompt = `You are a guitar chord expert. When given a song name and artist, provide accurate guitar chord progressions. Always respond with valid JSON only, no markdown.`;
 
     const userMessage = `Provide guitar chords for "${song}" by ${artist}. Return JSON with: key (string), tempo (string like "slow/moderate/fast/120bpm"), capo (integer, 0 if none), sections (array of {name, chords (unique chords array), pattern (chord names in order showing repetition)}). Include all song sections you know.`;
 
-    const message = await client.messages.create({
-      model: 'claude-opus-4-5',
-      max_tokens: 1024,
-      system: systemPrompt,
+    // Qwen Omni requires streaming mode
+    const stream = await client.chat.completions.create({
+      model: 'qwen2.5-omni-7b',
       messages: [
+        { role: 'system', content: systemPrompt },
         { role: 'user', content: userMessage }
-      ]
+      ],
+      modalities: ['text'],
+      stream: true
     });
 
-    const responseText = message.content[0].text.trim();
+    let responseText = '';
+    for await (const chunk of stream) {
+      responseText += chunk.choices[0]?.delta?.content || '';
+    }
+
+    responseText = responseText.trim();
 
     // Strip markdown code blocks if present
     let jsonText = responseText;
@@ -124,7 +134,6 @@ ipcMain.handle('generate-chords', async (event, { song, artist, apiKey }) => {
       return { error: 'Could not parse chord data from API response. Please try again.' };
     }
 
-    // Validate structure
     if (!chordData.sections || !Array.isArray(chordData.sections)) {
       return { error: 'Invalid chord data received. Please try again.' };
     }
@@ -132,7 +141,7 @@ ipcMain.handle('generate-chords', async (event, { song, artist, apiKey }) => {
     return { success: true, data: chordData };
   } catch (err) {
     if (err.status === 401) {
-      return { error: 'Invalid API key. Please check your Anthropic API key.' };
+      return { error: 'Invalid API key. Please check your DashScope API key.' };
     } else if (err.status === 429) {
       return { error: 'Rate limit exceeded. Please wait a moment and try again.' };
     } else if (err.status === 400) {

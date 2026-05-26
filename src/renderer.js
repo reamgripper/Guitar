@@ -364,10 +364,6 @@ saveKeyBtn.addEventListener('click', async () => {
     setApiStatus('Please enter an API key.', 'error');
     return;
   }
-  if (!key.startsWith('sk-ant-')) {
-    setApiStatus('Key should start with sk-ant-...', 'error');
-    return;
-  }
   try {
     await window.electronAPI.saveApiKey(key);
     setApiStatus('API key saved!', 'success');
