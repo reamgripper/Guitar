@@ -107,130 +107,83 @@ body {
   background-clip: text;
 }
 
-.settings-btn {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  border: 1px solid var(--border);
-  background: var(--bg-input);
-  color: var(--text-secondary);
-  cursor: pointer;
+/* ---- Ollama status badge ---- */
+.ollama-status {
   display: flex;
   align-items: center;
-  justify-content: center;
-  transition: all var(--transition);
-  -webkit-app-region: no-drag;
-}
-
-.settings-btn:hover {
-  background: var(--accent-light);
-  border-color: var(--border-focus);
-  color: var(--text-primary);
-}
-
-.settings-btn svg {
-  width: 16px;
-  height: 16px;
-}
-
-/* ---- API Panel ---- */
-.api-panel {
-  background: linear-gradient(135deg, rgba(124,58,237,0.12) 0%, rgba(15,52,96,0.6) 100%);
-  border: 1px solid rgba(124,58,237,0.3);
-  border-radius: var(--radius-lg);
-  margin-bottom: 16px;
-  overflow: hidden;
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  max-height: 200px;
-}
-
-.api-panel.collapsed {
-  max-height: 0;
-  border-color: transparent;
-  margin-bottom: 8px;
-}
-
-.api-panel-inner {
-  padding: 16px 20px;
-}
-
-.api-panel-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-  margin-bottom: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.key-icon {
-  width: 14px;
-  height: 14px;
-  color: var(--gold);
-}
-
-.api-input-row {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
-
-.api-input {
-  flex: 1;
-  height: 40px;
-  padding: 0 14px;
-  background: var(--bg-input);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  font-family: 'SF Mono', 'Fira Code', monospace;
+  gap: 7px;
   font-size: 0.8rem;
-  outline: none;
-  transition: all var(--transition);
+  color: var(--text-secondary);
 }
 
-.api-input:focus {
-  background: var(--bg-input-focus);
-  border-color: var(--border-focus);
-  box-shadow: 0 0 0 3px var(--accent-light);
+.ollama-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-muted);
+  transition: background var(--transition);
+}
+.ollama-dot.ok       { background: #10b981; box-shadow: 0 0 6px #10b981; }
+.ollama-dot.warn     { background: var(--gold); box-shadow: 0 0 6px var(--gold); }
+.ollama-dot.error    { background: var(--error); box-shadow: 0 0 6px var(--error); }
+.ollama-dot.checking { background: var(--text-muted); animation: pulse 1s infinite; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
 }
 
-.api-input::placeholder {
-  color: var(--text-muted);
-  font-family: var(--font);
+/* ---- Setup banner ---- */
+.setup-banner {
+  background: rgba(239,68,68,0.08);
+  border: 1px solid rgba(239,68,68,0.25);
+  border-radius: var(--radius-md);
+  margin-bottom: 16px;
 }
 
-.api-hint {
-  margin-top: 8px;
-  font-size: 0.75rem;
-  color: var(--text-muted);
+.setup-banner-inner {
+  padding: 14px 18px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
-.api-hint a {
+.setup-banner-inner strong {
+  color: var(--text-primary);
+}
+
+.setup-banner-inner code {
+  background: rgba(255,255,255,0.08);
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-size: 0.82rem;
+  color: var(--gold);
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+.setup-banner-inner a {
   color: var(--accent);
   text-decoration: none;
 }
+.setup-banner-inner a:hover { text-decoration: underline; }
 
-.api-hint a:hover {
-  text-decoration: underline;
+.setup-retry-btn {
+  margin-left: auto;
+  padding: 5px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background var(--transition);
+  white-space: nowrap;
 }
-
-.api-status {
-  margin-top: 6px;
-  font-size: 0.75rem;
-  min-height: 18px;
-}
-
-.api-status.success {
-  color: var(--success);
-}
-
-.api-status.error {
-  color: var(--error);
-}
+.setup-retry-btn:hover { background: var(--bg-input-focus); }
 
 /* ---- Buttons ---- */
 .btn {

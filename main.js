@@ -1,33 +1,10 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
-const fs = require('fs');
+
+const OLLAMA_BASE_URL = 'http://localhost:11434/v1';
+const OLLAMA_MODEL    = 'qwen2.5:7b';
 
 let mainWindow;
-
-function getConfigPath() {
-  return path.join(app.getPath('userData'), 'config.json');
-}
-
-function readConfig() {
-  const configPath = getConfigPath();
-  if (fs.existsSync(configPath)) {
-    try {
-      return JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    } catch (e) {
-      return {};
-    }
-  }
-  return {};
-}
-
-function writeConfig(data) {
-  const configPath = getConfigPath();
-  const dir = path.dirname(configPath);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-  fs.writeFileSync(configPath, JSON.stringify(data, null, 2), 'utf8');
-}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -70,24 +47,21 @@ app.on('window-all-closed', () => {
   }
 });
 
-// IPC handlers
-ipcMain.handle('save-api-key', async (event, apiKey) => {
-  const config = readConfig();
-  config.apiKey = apiKey;
-  writeConfig(config);
-  return { success: true };
-});
-
-ipcMain.handle('get-api-key', async () => {
-  const config = readConfig();
-  return { apiKey: config.apiKey || '' };
-});
-
-ipcMain.handle('generate-chords', async (event, { song, artist, apiKey }) => {
-  if (!apiKey) {
-    return { error: 'No API key provided. Please enter your DashScope API key.' };
+// Check whether Ollama is reachable and the model is pulled
+ipcMain.handle('check-ollama', async () => {
+  try {
+    const res = await fetch(`${OLLAMA_BASE_URL.replace('/v1', '')}/api/tags`);
+    if (!res.ok) return { running: false };
+    const data = await res.json();
+    const models = (data.models || []).map(m => m.name);
+    const modelReady = models.some(m => m.startsWith('qwen2.5'));
+    return { running: true, modelReady, models };
+  } catch {
+    return { running: false };
   }
+});
 
+ipcMain.handle('generate-chords', async (event, { song, artist }) => {
   if (!song || !artist) {
     return { error: 'Please provide both song name and artist.' };
   }
@@ -95,43 +69,35 @@ ipcMain.handle('generate-chords', async (event, { song, artist, apiKey }) => {
   try {
     const OpenAI = require('openai');
     const client = new OpenAI({
-      apiKey,
-      baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+      apiKey: 'ollama',          // Ollama ignores the key but the SDK requires a value
+      baseURL: OLLAMA_BASE_URL
     });
 
-    const systemPrompt = `You are a guitar chord expert. When given a song name and artist, provide accurate guitar chord progressions. Always respond with valid JSON only, no markdown.`;
+    const systemPrompt = `You are a guitar chord expert. When given a song name and artist, provide accurate guitar chord progressions. Always respond with valid JSON only, no markdown, no explanation.`;
 
     const userMessage = `Provide guitar chords for "${song}" by ${artist}. Return JSON with: key (string), tempo (string like "slow/moderate/fast/120bpm"), capo (integer, 0 if none), sections (array of {name, chords (unique chords array), pattern (chord names in order showing repetition)}). Include all song sections you know.`;
 
-    // Qwen Omni requires streaming mode
-    const stream = await client.chat.completions.create({
-      model: 'qwen2.5-omni-7b',
+    const completion = await client.chat.completions.create({
+      model: OLLAMA_MODEL,
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: userMessage }
+        { role: 'user',   content: userMessage }
       ],
-      modalities: ['text'],
-      stream: true
+      temperature: 0.2
     });
 
-    let responseText = '';
-    for await (const chunk of stream) {
-      responseText += chunk.choices[0]?.delta?.content || '';
-    }
+    let responseText = completion.choices[0]?.message?.content?.trim() || '';
 
-    responseText = responseText.trim();
-
-    // Strip markdown code blocks if present
-    let jsonText = responseText;
-    if (jsonText.startsWith('```')) {
-      jsonText = jsonText.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+    // Strip markdown code fences if present
+    if (responseText.startsWith('```')) {
+      responseText = responseText.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
     }
 
     let chordData;
     try {
-      chordData = JSON.parse(jsonText);
-    } catch (parseError) {
-      return { error: 'Could not parse chord data from API response. Please try again.' };
+      chordData = JSON.parse(responseText);
+    } catch {
+      return { error: 'Could not parse chord data. Try again — the model may need a moment to warm up.' };
     }
 
     if (!chordData.sections || !Array.isArray(chordData.sections)) {
@@ -140,13 +106,9 @@ ipcMain.handle('generate-chords', async (event, { song, artist, apiKey }) => {
 
     return { success: true, data: chordData };
   } catch (err) {
-    if (err.status === 401) {
-      return { error: 'Invalid API key. Please check your DashScope API key.' };
-    } else if (err.status === 429) {
-      return { error: 'Rate limit exceeded. Please wait a moment and try again.' };
-    } else if (err.status === 400) {
-      return { error: 'Bad request: ' + (err.message || 'Unknown error') };
+    if (err.cause?.code === 'ECONNREFUSED') {
+      return { error: 'Ollama is not running. Start it with: ollama serve' };
     }
-    return { error: 'API error: ' + (err.message || 'Unknown error occurred') };
+    return { error: 'Error: ' + (err.message || 'Unknown error occurred') };
   }
 });

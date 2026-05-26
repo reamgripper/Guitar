@@ -277,27 +277,26 @@ let transposeOffset = 0;
 
 // ─── DOM References ───────────────────────────────────────────────────────────
 
-const apiPanel        = document.getElementById('apiPanel');
-const apiKeyInput     = document.getElementById('apiKeyInput');
-const saveKeyBtn      = document.getElementById('saveKeyBtn');
-const apiStatus       = document.getElementById('apiStatus');
-const settingsBtn     = document.getElementById('settingsBtn');
-const songInput       = document.getElementById('songInput');
-const artistInput     = document.getElementById('artistInput');
-const generateBtn     = document.getElementById('generateBtn');
-const loadingContainer = document.getElementById('loadingContainer');
-const errorContainer  = document.getElementById('errorContainer');
-const errorMessage    = document.getElementById('errorMessage');
-const retryBtn        = document.getElementById('retryBtn');
-const resultsContainer = document.getElementById('resultsContainer');
+const songInput         = document.getElementById('songInput');
+const artistInput       = document.getElementById('artistInput');
+const generateBtn       = document.getElementById('generateBtn');
+const loadingContainer  = document.getElementById('loadingContainer');
+const errorContainer    = document.getElementById('errorContainer');
+const errorMessage      = document.getElementById('errorMessage');
+const retryBtn          = document.getElementById('retryBtn');
+const resultsContainer  = document.getElementById('resultsContainer');
 const sectionsContainer = document.getElementById('sectionsContainer');
-const songKey         = document.getElementById('songKey');
-const songTempo       = document.getElementById('songTempo');
-const songCapo        = document.getElementById('songCapo');
-const transposeDown   = document.getElementById('transposeDown');
-const transposeUp     = document.getElementById('transposeUp');
-const transposeReset  = document.getElementById('transposeReset');
-const transposeValue  = document.getElementById('transposeValue');
+const songKey           = document.getElementById('songKey');
+const songTempo         = document.getElementById('songTempo');
+const songCapo          = document.getElementById('songCapo');
+const transposeDown     = document.getElementById('transposeDown');
+const transposeUp       = document.getElementById('transposeUp');
+const transposeReset    = document.getElementById('transposeReset');
+const transposeValue    = document.getElementById('transposeValue');
+const ollamaDot         = document.getElementById('ollamaDot');
+const ollamaLabel       = document.getElementById('ollamaLabel');
+const setupBanner       = document.getElementById('setupBanner');
+const setupRetryBtn     = document.getElementById('setupRetryBtn');
 
 // ─── UI State Helpers ─────────────────────────────────────────────────────────
 
@@ -333,65 +332,31 @@ function hideAllStates() {
   resultsContainer.style.display = 'none';
 }
 
-// ─── API Key Management ───────────────────────────────────────────────────────
+// ─── Ollama Status ────────────────────────────────────────────────────────────
 
-async function initApiKey() {
-  try {
-    const result = await window.electronAPI.getApiKey();
-    if (result.apiKey) {
-      apiKeyInput.value = result.apiKey;
-      collapseApiPanel();
-    } else {
-      expandApiPanel();
-    }
-  } catch (e) {
-    expandApiPanel();
-  }
-}
-
-function collapseApiPanel() {
-  apiPanel.classList.add('collapsed');
-}
-
-function expandApiPanel() {
-  apiPanel.classList.remove('collapsed');
-  setTimeout(() => apiKeyInput.focus(), 100);
-}
-
-saveKeyBtn.addEventListener('click', async () => {
-  const key = apiKeyInput.value.trim();
-  if (!key) {
-    setApiStatus('Please enter an API key.', 'error');
-    return;
-  }
-  try {
-    await window.electronAPI.saveApiKey(key);
-    setApiStatus('API key saved!', 'success');
-    setTimeout(collapseApiPanel, 1200);
-  } catch (e) {
-    setApiStatus('Failed to save key.', 'error');
-  }
-});
-
-apiKeyInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') saveKeyBtn.click();
-});
-
-function setApiStatus(msg, type) {
-  apiStatus.textContent = msg;
-  apiStatus.className = 'api-status ' + type;
-  if (type === 'success') {
-    setTimeout(() => { apiStatus.textContent = ''; apiStatus.className = 'api-status'; }, 3000);
-  }
-}
-
-settingsBtn.addEventListener('click', () => {
-  if (apiPanel.classList.contains('collapsed')) {
-    expandApiPanel();
+async function checkOllama() {
+  ollamaLabel.textContent = 'Checking Ollama…';
+  ollamaDot.className = 'ollama-dot checking';
+  const result = await window.electronAPI.checkOllama();
+  if (!result.running) {
+    ollamaDot.className = 'ollama-dot error';
+    ollamaLabel.textContent = 'Ollama not running';
+    setupBanner.style.display = '';
+    generateBtn.disabled = true;
+  } else if (!result.modelReady) {
+    ollamaDot.className = 'ollama-dot warn';
+    ollamaLabel.textContent = 'Model not pulled';
+    setupBanner.style.display = '';
+    generateBtn.disabled = true;
   } else {
-    collapseApiPanel();
+    ollamaDot.className = 'ollama-dot ok';
+    ollamaLabel.textContent = 'Ollama ready';
+    setupBanner.style.display = 'none';
+    generateBtn.disabled = false;
   }
-});
+}
+
+setupRetryBtn.addEventListener('click', checkOllama);
 
 // ─── Chord Generation ─────────────────────────────────────────────────────────
 
@@ -410,19 +375,12 @@ async function generateChords() {
   const artist = artistInput.value.trim();
 
   if (!song || !artist) {
-    songInput.classList.toggle('shake', true);
-    artistInput.classList.toggle('shake', true);
+    songInput.classList.toggle('shake', !song);
+    artistInput.classList.toggle('shake', !artist);
     setTimeout(() => {
       songInput.classList.remove('shake');
       artistInput.classList.remove('shake');
     }, 500);
-    return;
-  }
-
-  const apiKey = apiKeyInput.value.trim();
-  if (!apiKey) {
-    expandApiPanel();
-    setApiStatus('Please enter your Anthropic API key first.', 'error');
     return;
   }
 
@@ -433,7 +391,7 @@ async function generateChords() {
   currentChordData = null;
 
   try {
-    const result = await window.electronAPI.generateChords({ song, artist, apiKey });
+    const result = await window.electronAPI.generateChords({ song, artist });
 
     if (result.error) {
       showError(result.error);
@@ -561,6 +519,6 @@ function updateTranspose() {
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
 (async function init() {
-  await initApiKey();
+  await checkOllama();
   songInput.focus();
 })();
