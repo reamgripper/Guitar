@@ -1,0 +1,31 @@
+{
+  "name": "guitar-chord-generator",
+  "version": "1.0.0",
+  "description": "Generate guitar chords for any song",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --mac",
+    "build-dmg": "electron-builder --mac dmg"
+  },
+  "build": {
+    "appId": "com.guitar.chord-generator",
+    "productName": "Guitar Chord Generator",
+    "mac": {
+      "category": "public.app-category.music",
+      "target": ["dmg", "zip"]
+    },
+    "dmg": {
+      "title": "Guitar Chord Generator",
+      "background": null,
+      "window": { "width": 540, "height": 380 }
+    }
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0"
+  },
+  "devDependencies": {
+    "electron": "^34.0.0",
+    "electron-builder": "^25.0.0"
+  }
+}

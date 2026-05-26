@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Guitar Chord Generator</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Title bar drag region -->
+  <div class="titlebar-drag"></div>
+
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-content">
+        <div class="header-logo">
+          <svg class="guitar-icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M32 4L44 16L28 28C28 28 30 32 28 36C26 40 20 44 14 42C8 40 4 34 6 28C8 22 14 18 18 20C22 22 20 24 20 24L32 4Z" stroke="#f59e0b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="15" cy="33" r="6" stroke="#f59e0b" stroke-width="2.5"/>
+            <path d="M36 8L40 12" stroke="#f59e0b" stroke-width="2" stroke-linecap="round"/>
+            <path d="M38 6L42 10" stroke="#f59e0b" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <h1 class="app-title">Guitar Chord Generator</h1>
+        </div>
+        <button class="settings-btn" id="settingsBtn" title="API Settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- API Key Panel -->
+    <div class="api-panel" id="apiPanel">
+      <div class="api-panel-inner">
+        <div class="api-panel-header">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="key-icon">
+            <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
+          </svg>
+          <span>Anthropic API Key</span>
+        </div>
+        <div class="api-input-row">
+          <input
+            type="password"
+            id="apiKeyInput"
+            class="api-input"
+            placeholder="sk-ant-api03-..."
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <button class="btn btn-save" id="saveKeyBtn">Save Key</button>
+        </div>
+        <p class="api-hint">Your API key is stored locally on your Mac. <a href="https://console.anthropic.com/" target="_blank">Get a key →</a></p>
+        <div class="api-status" id="apiStatus"></div>
+      </div>
+    </div>
+
+    <!-- Search Panel -->
+    <div class="search-panel">
+      <div class="search-inputs">
+        <div class="input-group">
+          <label class="input-label" for="songInput">Song Name</label>
+          <input
+            type="text"
+            id="songInput"
+            class="search-input"
+            placeholder="e.g. Wonderwall"
+            autocomplete="off"
+          />
+        </div>
+        <div class="input-group">
+          <label class="input-label" for="artistInput">Artist</label>
+          <input
+            type="text"
+            id="artistInput"
+            class="search-input"
+            placeholder="e.g. Oasis"
+            autocomplete="off"
+          />
+        </div>
+        <button class="btn btn-generate" id="generateBtn">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="5 3 19 12 5 21 5 3"/>
+          </svg>
+          Generate
+        </button>
+      </div>
+    </div>
+
+    <!-- Loading State -->
+    <div class="loading-container" id="loadingContainer" style="display:none;">
+      <div class="loading-inner">
+        <div class="music-spinner">
+          <div class="note note-1">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M9 18V5l12-2v13"/>
+              <circle cx="6" cy="18" r="3"/>
+              <circle cx="18" cy="16" r="3"/>
+            </svg>
+          </div>
+          <div class="note note-2">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M9 18V5l12-2v13"/>
+              <circle cx="6" cy="18" r="3"/>
+              <circle cx="18" cy="16" r="3"/>
+            </svg>
+          </div>
+          <div class="note note-3">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M9 18V5l12-2v13"/>
+              <circle cx="6" cy="18" r="3"/>
+              <circle cx="18" cy="16" r="3"/>
+            </svg>
+          </div>
+        </div>
+        <p class="loading-text">Finding chords for your song...</p>
+      </div>
+    </div>
+
+    <!-- Error State -->
+    <div class="error-container" id="errorContainer" style="display:none;">
+      <div class="error-inner">
+        <svg class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="8" x2="12" y2="12"/>
+          <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        <p class="error-message" id="errorMessage"></p>
+        <button class="btn btn-retry" id="retryBtn">Try Again</button>
+      </div>
+    </div>
+
+    <!-- Results Area -->
+    <div class="results-container" id="resultsContainer" style="display:none;">
+      <!-- Song Info Bar -->
+      <div class="song-info-bar">
+        <div class="song-meta">
+          <div class="meta-item">
+            <span class="meta-label">Key</span>
+            <span class="meta-value" id="songKey">—</span>
+          </div>
+          <div class="meta-divider"></div>
+          <div class="meta-item">
+            <span class="meta-label">Tempo</span>
+            <span class="meta-value" id="songTempo">—</span>
+          </div>
+          <div class="meta-divider"></div>
+          <div class="meta-item">
+            <span class="meta-label">Capo</span>
+            <span class="meta-value" id="songCapo">—</span>
+          </div>
+        </div>
+        <div class="transpose-controls">
+          <span class="transpose-label">Transpose</span>
+          <button class="transpose-btn" id="transposeDown" title="Transpose down 1 semitone">−1</button>
+          <span class="transpose-value" id="transposeValue">0</span>
+          <button class="transpose-btn" id="transposeUp" title="Transpose up 1 semitone">+1</button>
+          <button class="transpose-btn transpose-reset" id="transposeReset" title="Reset transpose">Reset</button>
+        </div>
+      </div>
+
+      <!-- Sections -->
+      <div class="sections-container" id="sectionsContainer"></div>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
