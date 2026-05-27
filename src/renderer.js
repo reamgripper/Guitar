@@ -368,12 +368,16 @@ function setMode(mode) {
   tabAudio.classList.toggle('active', mode === 'audio');
   audioZone.style.display = mode === 'audio' ? '' : 'none';
 
+  // Update button label: keep the SVG icon, update the text node
+  const btnSvg = generateBtn.querySelector('svg');
+  generateBtn.textContent = mode === 'audio' ? 'Analyse' : 'Generate';
+  if (btnSvg) generateBtn.prepend(btnSvg);
+  generateBtn.title = mode === 'audio' ? 'Analyse audio' : 'Generate chords';
+
   // In audio mode the Ollama status/banner doesn't gate the generate button
   if (mode === 'audio') {
     setupBanner.style.display = 'none';
     generateBtn.disabled = false;
-    generateBtn.querySelector('svg + *') && (generateBtn.lastChild.textContent = '');
-    generateBtn.title = 'Analyse audio';
   } else {
     // Re-check Ollama gating when switching back
     checkOllama();
@@ -593,12 +597,14 @@ function showPanel(panel) {
 function showResults() {
   loadingContainer.style.display = 'none';
   errorContainer.style.display = 'none';
+  analysisProgress.style.display = 'none';
   resultsContainer.style.display = 'block';
 }
 
 function showError(msg) {
   loadingContainer.style.display = 'none';
   resultsContainer.style.display = 'none';
+  analysisProgress.style.display = 'none';
   errorMessage.textContent = msg;
   errorContainer.style.display = 'flex';
 }
@@ -606,6 +612,7 @@ function showError(msg) {
 function showLoading() {
   errorContainer.style.display = 'none';
   resultsContainer.style.display = 'none';
+  analysisProgress.style.display = 'none';
   loadingContainer.style.display = 'flex';
 }
 
@@ -613,6 +620,7 @@ function hideAllStates() {
   loadingContainer.style.display = 'none';
   errorContainer.style.display = 'none';
   resultsContainer.style.display = 'none';
+  analysisProgress.style.display = 'none';
 }
 
 // ─── Ollama Status ────────────────────────────────────────────────────────────
