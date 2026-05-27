@@ -334,6 +334,9 @@ const ollamaDot         = document.getElementById('ollamaDot');
 const ollamaLabel       = document.getElementById('ollamaLabel');
 const setupBanner       = document.getElementById('setupBanner');
 const setupRetryBtn     = document.getElementById('setupRetryBtn');
+const lyricsSourceItem  = document.getElementById('lyricsSourceItem');
+const lyricsDivider     = document.getElementById('lyricsDivider');
+const lyricsSourceEl    = document.getElementById('lyricsSource');
 
 // ─── UI State Helpers ─────────────────────────────────────────────────────────
 
@@ -459,6 +462,16 @@ function renderResults(data) {
   songKey.textContent = transposedKey + (transposeOffset !== 0 ? ` (${transposeOffset > 0 ? '+' : ''}${transposeOffset})` : '');
   songTempo.textContent = data.tempo || '—';
   songCapo.textContent = data.capo > 0 ? `Fret ${data.capo}` : 'None';
+
+  // Lyrics source badge
+  if (data.lyricsSource) {
+    lyricsSourceEl.textContent = data.lyricsSource;
+    lyricsSourceItem.style.display = '';
+    lyricsDivider.style.display = '';
+  } else {
+    lyricsSourceItem.style.display = 'none';
+    lyricsDivider.style.display = 'none';
+  }
 
   // Sections
   sectionsContainer.innerHTML = '';

@@ -33,21 +33,47 @@ function createWindow() {
 
 app.whenReady().then(() => {
   createWindow();
-
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
-    }
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
+  if (process.platform !== 'darwin') app.quit();
 });
 
-// Check whether Ollama is reachable and the model is pulled
+// ─── Lyrics fetch ─────────────────────────────────────────────────────────────
+// Try lrclib.net first (open-source, no key, ~3M songs), fall back to lyrics.ovh
+
+async function fetchLyrics(artist, song) {
+  // 1. lrclib.net
+  try {
+    const url = `https://lrclib.net/api/get?artist_name=${encodeURIComponent(artist)}&track_name=${encodeURIComponent(song)}`;
+    const res = await fetch(url, {
+      headers: { 'Lrclib-Client': 'GuitarChordGenerator/1.0 (github.com/reamgripper/Guitar)' },
+      signal: AbortSignal.timeout(6000)
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.plainLyrics) return { lyrics: data.plainLyrics, source: 'lrclib' };
+    }
+  } catch { /* fall through */ }
+
+  // 2. lyrics.ovh fallback
+  try {
+    const url = `https://api.lyrics.ovh/v1/${encodeURIComponent(artist)}/${encodeURIComponent(song)}`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.lyrics) return { lyrics: data.lyrics, source: 'lyrics.ovh' };
+    }
+  } catch { /* fall through */ }
+
+  return null;
+}
+
+// ─── IPC ─────────────────────────────────────────────────────────────────────
+
 ipcMain.handle('check-ollama', async () => {
   try {
     const res = await fetch(`${OLLAMA_BASE_URL.replace('/v1', '')}/api/tags`);
@@ -68,40 +94,73 @@ ipcMain.handle('generate-chords', async (event, { song, artist }) => {
 
   try {
     const OpenAI = require('openai');
-    const client = new OpenAI({
-      apiKey: 'ollama',          // Ollama ignores the key but the SDK requires a value
-      baseURL: OLLAMA_BASE_URL
-    });
+    const client = new OpenAI({ apiKey: 'ollama', baseURL: OLLAMA_BASE_URL });
 
-    const systemPrompt = `You are a guitar chord expert. When given a song name and artist, provide accurate guitar chord progressions optimised for guitarists. Always respond with valid JSON only, no markdown, no explanation.`;
+    // Fetch real lyrics in parallel with nothing (just to not delay startup)
+    const lyricsResult = await fetchLyrics(artist, song);
 
-    const userMessage = `Provide guitar chords for "${song}" by ${artist}.
+    const systemPrompt = `You are a guitar chord expert. Always respond with valid JSON only — no markdown, no explanation, no extra text.`;
 
-Rules:
-- Prefer guitar-friendly keys that use open chord shapes: G, C, D, E, A and their relative minors (Em, Am, Dm, Bm).
-- If the song is naturally in a difficult key (lots of sharps/flats), suggest a capo position so the fingering uses open chord shapes instead of all barre chords.
-- Use the most common guitarist's arrangement, not the original recorded key unless it's already guitar-friendly.
+    let userMessage;
 
-Return JSON with:
-- key (string, the sounding key)
-- capo (integer, fret number if capo helps, 0 if not needed)
-- tempo (string like "slow/moderate/fast/120bpm")
-- sections (array of objects with:
-    - name (string, e.g. "Verse", "Chorus", "Bridge")
-    - chords (array of unique chord names used in this section)
-    - lines (array of strings — each string is one lyric line with chord markers embedded using square brackets, e.g. "[G]Today is gonna be the [Em]day that [C]they're gonna [D]throw it back to you")
-  )
+    if (lyricsResult) {
+      // Trim to ~2500 chars to stay within context window
+      const trimmedLyrics = lyricsResult.lyrics.slice(0, 2500);
 
-Chord marker rules for lines:
-- Place [ChordName] immediately before the syllable where the chord changes.
-- Every line must have at least one chord marker.
-- Use real lyrics from the song, not placeholder text.
+      userMessage = `Provide guitar chords for "${song}" by ${artist}.
 
-Example output for a verse:
-"lines": [
-  "[G]Today is gonna be the [Em]day",
-  "That they're gonna [C]throw it back to [D]you"
-]`;
+Here are the REAL lyrics (do not change them):
+"""
+${trimmedLyrics}
+"""
+
+Instructions:
+- Choose a guitar-friendly key using open chord shapes (G, C, D, E, A and their relative minors). If the song is in a difficult key, set a capo fret so the chord shapes are open.
+- Identify the song sections (Verse, Chorus, Pre-Chorus, Bridge, Outro, etc.) from the lyric content. Section headers like [Verse], [Chorus] in the lyrics indicate sections.
+- For each section, insert [ChordName] markers into the EXACT provided lyrics immediately before the syllable where the chord changes.
+- Every lyric line must start with or contain at least one [ChordName] marker.
+- Do not alter, paraphrase or omit any lyrics.
+
+Return JSON:
+{
+  "key": "G",
+  "capo": 0,
+  "tempo": "moderate",
+  "sections": [
+    {
+      "name": "Verse 1",
+      "chords": ["G", "Em", "C", "D"],
+      "lines": [
+        "[G]Today is gonna be the [Em]day",
+        "That they're gonna [C]throw it back to [D]you"
+      ]
+    }
+  ]
+}`;
+    } else {
+      // No lyrics found — ask Qwen for approximate chords only, no lyrics
+      userMessage = `Provide guitar chords for "${song}" by ${artist}.
+
+Instructions:
+- Choose a guitar-friendly key using open chord shapes (G, C, D, E, A and their relative minors). If the song is in a difficult key, set a capo fret.
+- List each section (Verse, Chorus, Bridge, etc.) with its chord progression.
+- For lines, show the chord sequence with placeholder text showing where chords change.
+
+Return JSON:
+{
+  "key": "G",
+  "capo": 0,
+  "tempo": "moderate",
+  "lyricsUnavailable": true,
+  "sections": [
+    {
+      "name": "Verse",
+      "chords": ["G", "Em", "C", "D"],
+      "lines": ["[G] / [Em] / [C] / [D]"]
+    }
+  ]
+}`;
+    }
 
     const completion = await client.chat.completions.create({
       model: OLLAMA_MODEL,
@@ -114,7 +173,6 @@ Example output for a verse:
 
     let responseText = completion.choices[0]?.message?.content?.trim() || '';
 
-    // Strip markdown code fences if present
     if (responseText.startsWith('```')) {
       responseText = responseText.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
     }
@@ -129,6 +187,9 @@ Example output for a verse:
     if (!chordData.sections || !Array.isArray(chordData.sections)) {
       return { error: 'Invalid chord data received. Please try again.' };
     }
+
+    // Attach lyrics source info for display
+    chordData.lyricsSource = lyricsResult?.source || null;
 
     return { success: true, data: chordData };
   } catch (err) {
