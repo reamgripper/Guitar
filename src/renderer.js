@@ -311,6 +311,10 @@ function buildLyricsHTML(lines, offset) {
 
 let currentChordData = null;
 let transposeOffset = 0;
+let currentMode = 'ai';
+let audioFile = null;
+let mediaRecorder = null;
+let recordedChunks = [];
 
 // ─── DOM References ───────────────────────────────────────────────────────────
 
@@ -318,6 +322,7 @@ const songInput         = document.getElementById('songInput');
 const artistInput       = document.getElementById('artistInput');
 const generateBtn       = document.getElementById('generateBtn');
 const loadingContainer  = document.getElementById('loadingContainer');
+const loadingText       = document.getElementById('loadingText');
 const errorContainer    = document.getElementById('errorContainer');
 const errorMessage      = document.getElementById('errorMessage');
 const retryBtn          = document.getElementById('retryBtn');
@@ -337,6 +342,244 @@ const setupRetryBtn     = document.getElementById('setupRetryBtn');
 const lyricsSourceItem  = document.getElementById('lyricsSourceItem');
 const lyricsDivider     = document.getElementById('lyricsDivider');
 const lyricsSourceEl    = document.getElementById('lyricsSource');
+
+// Audio mode DOM
+const tabAI             = document.getElementById('tabAI');
+const tabAudio          = document.getElementById('tabAudio');
+const audioZone         = document.getElementById('audioZone');
+const dropZone          = document.getElementById('dropZone');
+const audioFileInput    = document.getElementById('audioFileInput');
+const browseBtn         = document.getElementById('browseBtn');
+const audioFileInfo     = document.getElementById('audioFileInfo');
+const audioFileName     = document.getElementById('audioFileName');
+const audioFileDuration = document.getElementById('audioFileDuration');
+const clearAudioBtn     = document.getElementById('clearAudioBtn');
+const micBtn            = document.getElementById('micBtn');
+const micBtnLabel       = document.getElementById('micBtnLabel');
+const analysisProgress  = document.getElementById('analysisProgress');
+const progressFill      = document.getElementById('progressFill');
+const progressMsg       = document.getElementById('progressMsg');
+
+// ─── Mode switching ───────────────────────────────────────────────────────────
+
+function setMode(mode) {
+  currentMode = mode;
+  tabAI.classList.toggle('active', mode === 'ai');
+  tabAudio.classList.toggle('active', mode === 'audio');
+  audioZone.style.display = mode === 'audio' ? '' : 'none';
+
+  // In audio mode the Ollama status/banner doesn't gate the generate button
+  if (mode === 'audio') {
+    setupBanner.style.display = 'none';
+    generateBtn.disabled = false;
+    generateBtn.querySelector('svg + *') && (generateBtn.lastChild.textContent = '');
+    generateBtn.title = 'Analyse audio';
+  } else {
+    // Re-check Ollama gating when switching back
+    checkOllama();
+  }
+
+  hideAllStates();
+}
+
+tabAI.addEventListener('click', () => setMode('ai'));
+tabAudio.addEventListener('click', () => setMode('audio'));
+
+// ─── Audio file handling ──────────────────────────────────────────────────────
+
+function formatDuration(secs) {
+  const m = Math.floor(secs / 60);
+  const s = Math.floor(secs % 60).toString().padStart(2, '0');
+  return `${m}:${s}`;
+}
+
+function loadAudioFile(file) {
+  if (!file) return;
+  audioFile = file;
+  audioFileName.textContent = file.name;
+  audioFileDuration.textContent = '';
+
+  // Read duration
+  const url = URL.createObjectURL(file);
+  const tmpAudio = new Audio(url);
+  tmpAudio.addEventListener('loadedmetadata', () => {
+    audioFileDuration.textContent = `(${formatDuration(tmpAudio.duration)})`;
+    URL.revokeObjectURL(url);
+  }, { once: true });
+
+  dropZone.style.display = 'none';
+  audioFileInfo.style.display = 'flex';
+}
+
+function clearAudio() {
+  audioFile = null;
+  audioFileInput.value = '';
+  dropZone.style.display = '';
+  audioFileInfo.style.display = 'none';
+}
+
+browseBtn.addEventListener('click', () => audioFileInput.click());
+audioFileInput.addEventListener('change', () => {
+  if (audioFileInput.files[0]) loadAudioFile(audioFileInput.files[0]);
+});
+clearAudioBtn.addEventListener('click', clearAudio);
+
+// Drag and drop
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file && file.type.startsWith('audio/')) loadAudioFile(file);
+});
+dropZone.addEventListener('click', e => {
+  if (e.target !== browseBtn) audioFileInput.click();
+});
+
+// ─── Mic recording ────────────────────────────────────────────────────────────
+
+micBtn.addEventListener('click', async () => {
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    mediaRecorder.stop();
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    recordedChunks = [];
+    mediaRecorder = new MediaRecorder(stream);
+    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
+    mediaRecorder.onstop = () => {
+      stream.getTracks().forEach(t => t.stop());
+      const blob = new Blob(recordedChunks, { type: 'audio/webm' });
+      loadAudioFile(new File([blob], 'recording.webm', { type: 'audio/webm' }));
+      micBtn.classList.remove('recording');
+      micBtnLabel.textContent = 'Record from Mic';
+    };
+    mediaRecorder.start();
+    micBtn.classList.add('recording');
+    micBtnLabel.textContent = 'Stop Recording';
+  } catch {
+    showError('Microphone access denied. Please allow mic access and try again.');
+  }
+});
+
+// ─── Audio analysis mode ──────────────────────────────────────────────────────
+
+function setProgress(pct, msg) {
+  progressFill.style.width = pct + '%';
+  progressMsg.textContent = msg;
+}
+
+function buildSectionsFromPlain(plainLyrics, chordTimeline) {
+  // Split plain lyrics into approximate lines and assign chords by position
+  const lines = plainLyrics.split('\n').filter(l => l.trim());
+  const duration = chordTimeline.length ? chordTimeline[chordTimeline.length - 1].time : 0;
+  const sections = [];
+  let cur = { name: 'Verse 1', chords: [], lines: [] };
+  const sectionRe = /^\[([^\]]+)\]$/;
+
+  lines.forEach((line, idx) => {
+    const sm = sectionRe.exec(line.trim());
+    if (sm) {
+      if (cur.lines.length) sections.push(cur);
+      cur = { name: sm[1], chords: [], lines: [] };
+      return;
+    }
+    // Assign chord by fraction through song
+    const t = duration > 0 ? (idx / lines.length) * duration : 0;
+    let chord = null;
+    for (const {time, chord: c} of chordTimeline) {
+      if (time <= t + 0.5) chord = c; else break;
+    }
+    cur.lines.push(chord ? `[${chord}]${line}` : line);
+    if (chord && !cur.chords.includes(chord)) cur.chords.push(chord);
+  });
+  if (cur.lines.length) sections.push(cur);
+  return sections;
+}
+
+async function runAudioMode() {
+  const song = songInput.value.trim();
+  const artist = artistInput.value.trim();
+
+  if (!song || !artist) {
+    songInput.classList.toggle('shake', !song);
+    artistInput.classList.toggle('shake', !artist);
+    setTimeout(() => { songInput.classList.remove('shake'); artistInput.classList.remove('shake'); }, 500);
+    return;
+  }
+
+  if (!audioFile) {
+    dropZone.classList.add('drag-over');
+    setTimeout(() => dropZone.classList.remove('drag-over'), 800);
+    return;
+  }
+
+  generateBtn.disabled = true;
+  hideAllStates();
+  analysisProgress.style.display = '';
+  setProgress(2, 'Fetching synced lyrics…');
+  transposeOffset = 0;
+  transposeValue.textContent = '0';
+  currentChordData = null;
+
+  try {
+    // 1. Fetch synced lyrics
+    const lyricsResult = await window.electronAPI.fetchLyricsSynced({ song, artist });
+
+    setProgress(10, 'Reading audio file…');
+    const arrayBuffer = await audioFile.arrayBuffer();
+
+    // 2. Analyse audio
+    const { chordTimeline } = await analyzeAudio(arrayBuffer, (pct, msg) => {
+      setProgress(10 + Math.round(pct * 0.8), msg);
+    });
+
+    setProgress(92, 'Building chord sheet…');
+
+    let sections, lyricsSource;
+
+    if (lyricsResult.success && lyricsResult.syncedLyrics) {
+      // Best path: synced LRC lyrics + audio chords
+      const syncedLines = parseLRC(lyricsResult.syncedLyrics);
+      sections = buildSections(syncedLines, chordTimeline);
+      lyricsSource = lyricsResult.source;
+    } else if (lyricsResult.success && lyricsResult.plainLyrics) {
+      // Fallback: plain lyrics, approximate chord placement
+      sections = buildSectionsFromPlain(lyricsResult.plainLyrics, chordTimeline);
+      lyricsSource = lyricsResult.source + ' (approx.)';
+    } else {
+      // No lyrics: just show chord timeline as sections
+      const total = chordTimeline.length ? chordTimeline[chordTimeline.length-1].time : 0;
+      let prev = null;
+      const lines = [];
+      for (const {time, chord} of chordTimeline) {
+        if (chord !== prev) { lines.push(`[${chord}] — ${formatDuration(time)}`); prev = chord; }
+      }
+      sections = [{ name: 'Chord Timeline', chords: [...new Set(chordTimeline.map(f=>f.chord).filter(Boolean))], lines }];
+      lyricsSource = null;
+    }
+
+    if (!sections || !sections.length) {
+      showError('Could not detect chords in this audio. Try a cleaner recording or different song.');
+      return;
+    }
+
+    const allChords = [...new Set(sections.flatMap(s => s.chords).filter(Boolean))];
+    const key = allChords[0] || '—';
+
+    currentChordData = { key, capo: 0, tempo: 'detected', sections, lyricsSource };
+    analysisProgress.style.display = 'none';
+    renderResults(currentChordData);
+    showResults();
+  } catch (err) {
+    analysisProgress.style.display = 'none';
+    showError('Audio analysis failed: ' + (err.message || 'Unknown error'));
+  } finally {
+    generateBtn.disabled = false;
+  }
+}
 
 // ─── UI State Helpers ─────────────────────────────────────────────────────────
 
@@ -381,13 +624,11 @@ async function checkOllama() {
   if (!result.running) {
     ollamaDot.className = 'ollama-dot error';
     ollamaLabel.textContent = 'Ollama not running';
-    setupBanner.style.display = '';
-    generateBtn.disabled = true;
+    if (currentMode === 'ai') { setupBanner.style.display = ''; generateBtn.disabled = true; }
   } else if (!result.modelReady) {
     ollamaDot.className = 'ollama-dot warn';
     ollamaLabel.textContent = 'Model not pulled';
-    setupBanner.style.display = '';
-    generateBtn.disabled = true;
+    if (currentMode === 'ai') { setupBanner.style.display = ''; generateBtn.disabled = true; }
   } else {
     ollamaDot.className = 'ollama-dot ok';
     ollamaLabel.textContent = 'Ollama ready';
@@ -400,10 +641,12 @@ setupRetryBtn.addEventListener('click', checkOllama);
 
 // ─── Chord Generation ─────────────────────────────────────────────────────────
 
-generateBtn.addEventListener('click', generateChords);
+generateBtn.addEventListener('click', () => {
+  if (currentMode === 'audio') runAudioMode(); else generateChords();
+});
 
-songInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') generateChords(); });
-artistInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') generateChords(); });
+songInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { if (currentMode === 'audio') runAudioMode(); else generateChords(); } });
+artistInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { if (currentMode === 'audio') runAudioMode(); else generateChords(); } });
 
 retryBtn.addEventListener('click', () => {
   hideAllStates();

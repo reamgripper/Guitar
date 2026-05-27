@@ -74,6 +74,34 @@ async function fetchLyrics(artist, song) {
 
 // ─── IPC ─────────────────────────────────────────────────────────────────────
 
+ipcMain.handle('fetch-lyrics-synced', async (event, { song, artist }) => {
+  const lrclib = async () => {
+    const res = await fetch(
+      `https://lrclib.net/api/get?artist_name=${encodeURIComponent(artist)}&track_name=${encodeURIComponent(song)}`,
+      { headers: {'Lrclib-Client':'GuitarChordGenerator/1.0'}, signal: AbortSignal.timeout(7000) }
+    );
+    if (!res.ok) return null;
+    const d = await res.json();
+    return { syncedLyrics: d.syncedLyrics||null, plainLyrics: d.plainLyrics||null, source:'lrclib' };
+  };
+  const ovh = async () => {
+    const res = await fetch(
+      `https://api.lyrics.ovh/v1/${encodeURIComponent(artist)}/${encodeURIComponent(song)}`,
+      { signal: AbortSignal.timeout(7000) }
+    );
+    if (!res.ok) return null;
+    const d = await res.json();
+    return d.lyrics ? { syncedLyrics: null, plainLyrics: d.lyrics, source:'lyrics.ovh' } : null;
+  };
+  try {
+    const result = await lrclib() || await ovh();
+    if (result) return { success: true, ...result };
+    return { success: false, error: 'Lyrics not found for this song.' };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
 ipcMain.handle('check-ollama', async () => {
   try {
     const res = await fetch(`${OLLAMA_BASE_URL.replace('/v1', '')}/api/tags`);
